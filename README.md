@@ -15,5 +15,6 @@ Utilities that make my life easier as a linux user.
 
 ## Misc
 
+* [`mons`](https://github.com/nikku/mons)
 * [`i3exit`](./i3exit)
 * [`opn`](./opn)
