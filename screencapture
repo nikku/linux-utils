@@ -39,6 +39,17 @@ print_usage()
   echo "    -n              do not open browser"
   echo "    -r rate         frame rate used for recording"
   echo "    -s              print additional stats"
+  echo "    -l              use last resolution"
+  echo ""
+  echo ""
+  echo "Examples:"
+  echo ""
+
+  echo "    # capture video with 30s duration"
+  echo "    screencapture -t 30"
+  echo ""
+  echo "    # re-use previously selected bounds"
+  echo "    screencapture -t 30 -l"
 }
 
 cleanup()
