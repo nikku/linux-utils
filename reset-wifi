@@ -1,0 +1,4 @@
+#!/bin/sh
+
+nmcli connection down Zuhause
+nmcli connection up Zuhause

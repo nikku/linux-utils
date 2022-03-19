@@ -1,0 +1,11 @@
+#!/bin/bash
+
+TMP_NAME=$(mktemp -u ~/Downloads/screenshot.XXXXXX.png)
+
+slop=$(slop -f "%g") || exit 1
+read -r G < <(echo $slop)
+import -window root -crop $G $TMP_NAME
+
+echo "Saved to $TMP_NAME, copied to clipboard"
+
+xclip -selection clipboard -target image/png $TMP_NAME

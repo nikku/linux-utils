@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+function helpmsg {
+  echo "usage: $0 {up|down|status}"
+  exit 1
+}
+
+function hotspot_up {
+  nmcli connection up hotente
+}
+
+function hotspot_down {
+  nmcli connection down hotente
+}
+
+function hotspot_status {
+  nmcli connection show hotente | grep GENERAL.STATE | cut -d":" -f2 | xargs
+}
+
+# check argument number
+if [ $# -ne 1 ]; then
+  helpmsg
+fi
+
+# run commands
+case $1 in
+  up) hotspot_up ;;
+  down) hotspot_down ;;
+  status) hotspot_status ;;
+  *) helpmsg ;;
+esac

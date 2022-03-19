@@ -1,0 +1,216 @@
+#!/bin/bash
+
+TMP_DIR=~/Downloads
+TMP_NAME=$(mktemp -u $TMP_DIR/capture.XXXXXX)
+
+FRAME_RATE=30
+
+OPEN=1
+MODE=gif
+
+CONFIG_DIR=~/.config/screencapture
+PID_FILE="$CONFIG_DIR/.pid"
+LAST_RESOLUTION_FILE="$CONFIG_DIR/.resolution"
+
+mkdir -p "$CONFIG_DIR"
+
+PID="$$"
+
+EXISTING_PID=$([ -f "$PID_FILE" ] && cat "$PID_FILE");
+
+if [ -n "$EXISTING_PID" ]; then
+  kill -SIGINT $EXISTING_PID -$EXISTING_PID 2> /dev/null
+
+  sleep 1
+fi
+
+echo "$PID" > $PID_FILE
+
+
+print_usage()
+{
+  echo "Usage: $0 [...OPTIONS]"
+  echo ""
+  echo "    -i file         use input file instead of capturing screen"
+  echo "    -k              keep temporary files around"
+  echo "    -t seconds=10   capture time"
+  echo "    -o file         output file"
+  echo "    -m mode=gif     output mode (video, gif)"
+  echo "    -n              do not open browser"
+  echo "    -r rate         frame rate used for recording"
+  echo "    -s              print additional stats"
+}
+
+cleanup()
+{
+  if [ -z "$KEEP_TEMP_FILES" ]; then
+    rm -f $TMP_GIF
+
+    if [ -z "$USE_INPUT" ]; then
+      rm -f $TMP_VIDEO
+    fi
+  fi
+}
+
+control_c()
+# run if user hits control-c
+{
+  if [ -z "$RECORDING" ]; then
+    echo -en "\n*** Ouch! Exiting ***\n"
+    cleanup
+    exit $?
+  fi
+}
+
+# trap keyboard interrupt (control-c)
+trap control_c SIGINT
+
+
+LENGTH=10
+
+while getopts ":i:t:o:r:m:bkshl" OPTION; do
+  case "${OPTION}" in
+    i)
+      TMP_VIDEO=${OPTARG}
+      USE_INPUT=1
+      ;;
+    t)
+      LENGTH=${OPTARG}
+      ;;
+    k)
+      KEEP_TEMP_FILES=1
+      ;;
+    r)
+      FRAME_RATE=${OPTARG}
+      ;;
+    m)
+      MODE=${OPTARG}
+
+      case $MODE in
+        video|gif)
+          ;;
+        *)
+          echo "unknown mode, expected {gif,video}";
+          exit 1
+          ;;
+      esac
+      ;;
+    o)
+      TMP_GIF_OPTIMIZED=${OPTARG}
+      ;;
+    n)
+      OPEN=
+      ;;
+    s)
+      PRINT_STATS=1
+      ;;
+    h)
+      print_usage
+      exit 0
+      ;;
+    l)
+      USE_LAST_RESOLUTION=1
+      ;;
+    *) # echo "Incorrect options provided" exit 1 ;;
+      echo "unknown option: $OPTION"
+      exit 1
+      ;;
+  esac;
+done
+
+if [ -z "$TMP_VIDEO" ]; then
+  TMP_VIDEO="${TMP_NAME}.mkv"
+fi
+
+if [ "$MODE" = "video" ]; then
+  TMP_VIDEO_OPTIMIZED="${TMP_NAME}_optimized.mp4"
+fi
+
+if [ "$MODE" = "gif" ]; then
+  TMP_GIF="${TMP_NAME}.gif"
+  TMP_GIF_OPTIMIZED="${TMP_NAME}_optimized.gif"
+fi
+
+if [ -z "$USE_INPUT" ]; then
+
+  SLOP=$([ -n "$USE_LAST_RESOLUTION" ] && [ -f "$LAST_RESOLUTION_FILE" ] && cat "$LAST_RESOLUTION_FILE")
+
+  if [ -n "$SLOP" ]; then
+    echo ":: Using last resolution: $SLOP"
+  else
+    echo ":: Select a region using the mouse"
+
+    SLOP=$(slop -q -f "%x %y %w %h %g %i") || exit 1
+
+    echo "$LAST_RESOLUTION_FILE"
+    echo "$SLOP" > "$LAST_RESOLUTION_FILE"
+  fi
+
+  read -r X Y W H G ID < <(echo $SLOP)
+
+  echo ":: Wait 2s"
+  sleep 2
+
+  echo ":: Recording screen ($LENGTH seconds / complete using CTRL+Z)"
+  RECORDING=1
+  ffmpeg -f x11grab -show_region 1 -framerate $FRAME_RATE -s "$W"x"$H" -i :0.0+$X,$Y -t $LENGTH -c:v libx264rgb -crf 0 -preset ultrafast $TMP_VIDEO
+  unset RECORDING
+
+else
+  echo ":: Using existing input"
+fi
+
+if [ -n "$TMP_GIF" ]; then
+  echo ":: Converting to GIF"
+  ffmpeg \
+    -i $TMP_VIDEO \
+    -r 15 \
+    -vf "fps=15,split[s0][s1];[s0]palettegen=max_colors=50[p];[s1][p]paletteuse" \
+    -loop 0 \
+    $TMP_GIF
+fi
+
+if [ -n "$TMP_GIF_OPTIMIZED" ]; then
+  echo ":: Optimizing GIF"
+  gifsicle $TMP_GIF -l -O3 -o $TMP_GIF_OPTIMIZED
+fi
+
+if [ -n "$TMP_VIDEO_OPTIMIZED" ]; then
+  echo ":: Optimizing video"
+
+  (cd $TMP_DIR && \
+    #ffmpeg -i $TMP_VIDEO -c:v libvpx-vp9 -pass 1 -b:v 0 -crf 33 -threads 8 -speed 4 \
+    #  -tile-columns 6 -frame-parallel 1 \
+    #  -an -f null /dev/null && \
+    #ffmpeg -i $TMP_VIDEO -c:v libvpx-vp9 -pass 2 -b:v 0 -crf 33 -threads 8 -speed 2 \
+    #  -tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 \
+    #  -c:a libopus -b:a 64k -f webm $TMP_VIDEO_OPTIMIZED)
+    ffmpeg -i $TMP_VIDEO -c:v libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 -crf 22 -preset veryslow -vf scale=1280:-2 -c:a aac -strict experimental -movflags +faststart -threads 0 $TMP_VIDEO_OPTIMIZED)
+fi
+
+if [ -n "$PRINT_STATS" ]; then
+  echo ":: Generated stats"
+  du -h $TMP_VIDEO
+
+  if [ -n "$TMP_GIF" ]; then
+    du -h $TMP_GIF
+  fi
+
+fi
+
+cleanup
+
+if [ "$MODE" = "gif" ]; then
+  OUTPUT_FILE=$TMP_GIF_OPTIMIZED
+fi
+
+if [ "$MODE" = "video" ]; then
+  OUTPUT_FILE=$TMP_VIDEO_OPTIMIZED
+fi
+
+echo ":: Recording created"
+du -h $OUTPUT_FILE
+
+if [ -n "$OPEN" ]; then
+  BROWSER=chromium:firefox xdg-open "file://$(realpath $OUTPUT_FILE)" > /dev/null 2>&1
+fi

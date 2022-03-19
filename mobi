@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+function helpmsg {
+  echo "usage: $0 {up|down|status|stats}"
+  exit 1
+}
+
+function mobi_up {
+  nmcli radio wwan on
+  nmcli connection up wwan
+}
+
+function mobi_down {
+  nmcli connection down wwan
+  nmcli radio wwan off
+}
+
+function mobi_status {
+  nmcli connection show wwan | grep GENERAL.STATE | cut -d":" -f2 | xargs
+}
+
+function mobi_stats {
+  vnstat $@
+}
+
+# check argument number
+if [ $# -lt 1 ]; then
+  helpmsg
+fi
+
+# run commands
+case $1 in
+  up) mobi_up ;;
+  down) mobi_down ;;
+  status) mobi_status ;;
+  stats) shift; mobi_stats $@ ;;
+  *) helpmsg ;;
+esac
