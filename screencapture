@@ -30,7 +30,6 @@ print_usage()
   echo "    -r rate         frame rate used for recording"
   echo "    -s              print additional stats"
   echo "    -l              use last resolution"
-  echo "    -x              interrupt existing screencapture instance"
   echo ""
   echo ""
   echo "Examples:"
@@ -70,7 +69,7 @@ trap control_c SIGINT
 LENGTH=10
 
 # argument parsing
-while getopts ":i:t:o:r:m:xbkshl" OPTION; do
+while getopts ":i:t:o:r:m:bkshl" OPTION; do
   case "${OPTION}" in
     i)
       TMP_VIDEO=${OPTARG}
@@ -100,9 +99,6 @@ while getopts ":i:t:o:r:m:xbkshl" OPTION; do
     o)
       TMP_GIF_OPTIMIZED=${OPTARG}
       ;;
-    x)
-      INTERRUPT=1
-      ;;
     n)
       OPEN=
       ;;
@@ -126,17 +122,21 @@ done
 # single instance behavior
 EXISTING_PID=$([ -f "$PID_FILE" ] && cat "$PID_FILE");
 
+RUNNING=
+
 if [ -n "$EXISTING_PID" ]; then
-  kill -SIGINT $EXISTING_PID -$EXISTING_PID 2> /dev/null
+  RUNNING="$(ps -p $EXISTING_PID -o comm=)"
+fi
+
+echo "$RUNNING"
+
+if [ -n "$RUNNING" ]; then
+  kill -SIGKILL $EXISTING_PID -$EXISTING_PID 2> /dev/null
 
   sleep 1
 fi
 
 echo "$PID" > $PID_FILE
-
-if [ -n "$INTERRUPT" ]; then
-  exit 0;
-fi
 
 if [ -z "$TMP_VIDEO" ]; then
   TMP_VIDEO="${TMP_NAME}.mkv"
